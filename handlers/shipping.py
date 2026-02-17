@@ -6,20 +6,29 @@ from utils.image_gen import generar_ticket_imagen
 
 def register(bot):
     
-    # --- MENÚ ENVÍOS ---
+    # --- GENERAR ENVÍO (Para Motomandado) ---
     @bot.callback_query_handler(func=lambda call: call.data == "nuevo_envio")
     def menu_envios(call):
-        msg = bot.send_message(call.message.chat.id, "Escribe los datos del envío en este formato:\n\n`Cliente - Producto - Dirección`\n\nEj: Juan Perez - Hoodie Bad Bunny M - Calle Falsa 123", parse_mode="Markdown")
+        msg = bot.send_message(
+            call.message.chat.id, 
+            "📝 **Nuevo Envío**\n\nIngresa los datos en una sola línea así:\n`Cliente - Prenda y Talla - Dirección`\n\nEj: *Mateo - Hoodie Bad Bunny L - Av. Siempre Viva 123*", 
+            parse_mode="Markdown"
+        )
         bot.register_next_step_handler(msg, procesar_envio)
 
     def procesar_envio(message):
         try:
+            # Validación simple
+            if "-" not in message.text:
+                raise ValueError("Formato incorrecto")
+
             datos = message.text.split('-')
+            # Limpiamos espacios extra
             cliente = datos[0].strip()
             prod_info = datos[1].strip()
-            direccion = datos[2].strip()
+            direccion = datos[2].strip() if len(datos) > 2 else "Retiro en Local"
             
-            # Generar Tracking ID (MFB-XXXX)
+            # Generar Tracking ID Interno
             suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
             track_id = f"MFB-{suffix}"
             
@@ -28,26 +37,35 @@ def register(bot):
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO envios (tracking_id, cliente_nombre, direccion, producto_info, estado)
-                    VALUES (%s, %s, %s, %s, 'Pendiente')
+                    VALUES (%s, %s, %s, %s, 'En Preparación')
                 """, (track_id, cliente, direccion, prod_info))
             conn.commit()
             conn.close()
             
-            # Generar Imagen
-            img_bio = generar_ticket_imagen(track_id, cliente, prod_info, "Pendiente")
+            # Generar Imagen (Etiqueta Virtual)
+            img_bio = generar_ticket_imagen(track_id, cliente, prod_info, "En Preparación")
             
-            bot.send_photo(message.chat.id, img_bio, caption=f"✅ **Envío Generado**\nTracking: `{track_id}`\nEstado: Pendiente de Moto", parse_mode="Markdown")
+            bot.send_photo(
+                message.chat.id, 
+                img_bio, 
+                caption=f"✅ **Etiqueta Generada**\nReenvía esto al repartidor.\n\n🆔 `{track_id}`\n📍 {direccion}", 
+                parse_mode="Markdown"
+            )
+            # Volver al menú automáticamente o mostrar botón
+            markup = types.InlineKeyboardMarkup()
+            markup.add(btn_atras("main_menu"))
+            bot.send_message(message.chat.id, "...", reply_markup=markup)
             
         except Exception as e:
-            bot.send_message(message.chat.id, f"❌ Error en formato. Asegurate de usar guiones separadores.\nError: {e}")
+            bot.send_message(message.chat.id, f"❌ Error: Usa el formato `Nombre - Producto - Dirección`. \nDetalle: {e}")
 
-    # --- TRACKING (Cliente) ---
+    # --- BUSCADOR INTERNO (Para ver si ya se entregó) ---
     @bot.callback_query_handler(func=lambda call: call.data == "track_pedido")
     def ask_tracking(call):
-        msg = bot.send_message(call.message.chat.id, "🔍 Envía tu código de seguimiento (Ej: MFB-A1B2):")
-        bot.register_next_step_handler(msg, buscar_tracking)
+        msg = bot.send_message(call.message.chat.id, "🔎 Ingresa el ID del Tracker (Ej: MFB-X123):")
+        bot.register_next_step_handler(msg, buscar_tracking_admin)
 
-    def buscar_tracking(message):
+    def buscar_tracking_admin(message):
         track_id = message.text.strip().upper()
         conn = get_connection()
         cur = conn.cursor()
@@ -56,7 +74,32 @@ def register(bot):
         conn.close()
         
         if envio:
-            txt = f"📦 **Estado del Pedido**\n\n🆔 ID: `{envio['tracking_id']}`\n👤 Cliente: {envio['cliente_nombre']}\n👕 Item: {envio['producto_info']}\n📍 Destino: {envio['direccion']}\n\n🚀 **ESTADO ACTUAL: {envio['estado']}**"
-            bot.send_message(message.chat.id, txt, parse_mode="Markdown")
+            txt = (
+                f"📦 **Detalle del Envío**\n"
+                f"🆔 `{envio['tracking_id']}`\n"
+                f"📅 Fecha: {envio['fecha']}\n"
+                f"👤 Cliente: {envio['cliente_nombre']}\n"
+                f"👕 Item: {envio['producto_info']}\n"
+                f"📍 Destino: {envio['direccion']}\n"
+                f"🚀 Estado: **{envio['estado']}**"
+            )
+            markup = types.InlineKeyboardMarkup()
+            # Aquí podríamos agregar botón para cambiar estado "Marcar Entregado"
+            markup.add(types.InlineKeyboardButton("✅ Marcar Entregado", callback_data=f"set_entregado_{track_id}"))
+            markup.add(btn_atras("main_menu"))
+            bot.send_message(message.chat.id, txt, parse_mode="Markdown", reply_markup=markup)
         else:
-            bot.send_message(message.chat.id, "❌ No encontré ese código de seguimiento.")
+            bot.send_message(message.chat.id, "❌ No existe ese envío en la base de datos.")
+
+    # --- CAMBIAR ESTADO A ENTREGADO ---
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("set_entregado_"))
+    def marcar_entregado(call):
+        track_id = call.data.split("_")[2]
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("UPDATE envios SET estado = 'Entregado' WHERE tracking_id = %s", (track_id,))
+        conn.commit()
+        conn.close()
+        bot.answer_callback_query(call.id, "✅ Marcado como entregado")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        bot.send_message(call.message.chat.id, f"✅ El envío `{track_id}` ha sido cerrado.", parse_mode="Markdown")
