@@ -1,40 +1,54 @@
 import os
 import time
 import telebot
-from dotenv import load_dotenv
-from utils.keep_alive import start_server
 from database.db import init_db
 
-# Handlers
+# 1. Importar el keep_alive desde la carpeta utils
+from utils.keep_alive import start_server
+
+# 2. Importar los handlers
 from handlers import start, catalogs, products, shipping, statistics
 
-# Cargar .env si estás en local (en Render no hace falta si configuras las variables)
-load_dotenv()
+# Intentar cargar .env solo si existe (para local), en Render no fallará si no está
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
-    print("❌ ERROR: No se encontró BOT_TOKEN")
-    exit()
+    print("❌ ERROR FATAL: No se encontró BOT_TOKEN en las variables de entorno.")
+    exit(1)
 
 bot = telebot.TeleBot(TOKEN)
 
-# 1. Iniciar DB
+# 3. Inicializar DB
+print("🛠 Inicializando base de datos...")
 init_db()
 
-# 2. Registrar Handlers
-start.register(bot)
-catalogs.register(bot)
-products.register(bot)
-shipping.register(bot)
-statistics.register(bot)
+# 4. Registrar Handlers
+# Aquí es donde fallaba antes. Ahora start.register ya existe.
+print("🔗 Conectando cerebros (handlers)...")
+try:
+    start.register(bot)
+    catalogs.register(bot)
+    products.register(bot)
+    shipping.register(bot)
+    statistics.register(bot)
+    print("✅ Handlers cargados correctamente.")
+except AttributeError as e:
+    print(f"❌ ERROR CRÍTICO cargando handlers: {e}")
+    exit(1)
 
-# 3. Iniciar Servidor Keep Alive (Para UptimeRobot)
+# 5. Iniciar Servidor Web (Para que Render no mate el bot)
+print("🌍 Iniciando servidor web de respaldo...")
 start_server()
 
-# 4. Loop principal con reconexión automática
+# 6. Loop principal
 def main_loop():
-    print("🤖 MyFanBox Bot Iniciado...")
+    print("🤖 MyFanBox Bot Iniciado y escuchando...")
     while True:
         try:
             bot.infinity_polling(timeout=10, long_polling_timeout=5)
