@@ -4,24 +4,16 @@ def btn_atras(callback_data):
     return InlineKeyboardButton("🔙 Volver", callback_data=callback_data)
 
 def menu_principal_kb():
-    """Panel de Control UNIFICADO (Solo Admins)"""
-    markup = InlineKeyboardMarkup(row_width=2)
+    markup = InlineKeyboardMarkup(row_width=1)
+    # Entrada Principal
+    markup.add(InlineKeyboardButton("🎫 Gestionar Eventos", callback_data="admin_events"))
     
-    # Fila 1: El núcleo del inventario
-    markup.add(
-        InlineKeyboardButton("📂 Catálogos", callback_data="admin_cats"),
-        InlineKeyboardButton("👕 Productos / Stock", callback_data="admin_prods")
-    )
-    
-    # Fila 2: Logística (Motomandado)
-    markup.add(
+    # Logística
+    markup.row(
         InlineKeyboardButton("🛵 Nuevo Envío", callback_data="nuevo_envio"),
         InlineKeyboardButton("🔎 Buscar Tracker", callback_data="track_pedido")
     )
     
-    # Fila 3: Datos
-    markup.add(
-        InlineKeyboardButton("📊 Estadísticas Globales", callback_data="ver_stats")
-    )
-        
+    # Stats
+    markup.add(InlineKeyboardButton("📊 Estadísticas", callback_data="ver_stats"))
     return markup

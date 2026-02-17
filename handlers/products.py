@@ -2,24 +2,25 @@ from telebot import types
 from database.db import get_connection
 from utils.keyboards import btn_atras
 
-# Memoria temporal para la carga de stock: { user_id: { 'S': 0, 'M': 5 ... } }
-DRAFT_STOCK = {}
-CURRENT_PROD_EDIT = {} # { user_id: prod_id }
+# Memoria temporal
+DRAFT_STOCK = {}     # { user_id: {'XS': 0, 'S': 5...} }
+CURRENT_PROD = {}    # { user_id: prod_id }
 
 def register(bot):
     
-    # --- LISTAR PRODUCTOS ---
+    # --- NIVEL 3: PRODUCTOS ---
     @bot.callback_query_handler(func=lambda call: call.data.startswith("list_prod_"))
     def list_products(call):
         cat_id = call.data.split("_")[2]
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute("SELECT id, nombre, precio FROM productos WHERE catalogo_id = %s", (cat_id,))
-        prods = cur.fetchall()
         
-        # Necesitamos saber el evento_id para el botón volver
-        cur.execute("SELECT evento_id FROM catalogos WHERE id = %s", (cat_id,))
-        evento_id = cur.fetchone()['evento_id']
+        # Datos para volver atrás
+        cur.execute("SELECT nombre, evento_id FROM catalogos WHERE id = %s", (cat_id,))
+        cat_data = cur.fetchone()
+        
+        cur.execute("SELECT id, nombre FROM productos WHERE catalogo_id = %s ORDER BY id DESC", (cat_id,))
+        prods = cur.fetchall()
         conn.close()
         
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -27,172 +28,172 @@ def register(bot):
             markup.add(types.InlineKeyboardButton(f"👕 {p['nombre']}", callback_data=f"view_prod_{p['id']}"))
         
         markup.add(types.InlineKeyboardButton("➕ Nuevo Producto", callback_data=f"new_prod_ask_{cat_id}"))
-        markup.add(btn_atras(f"open_event_{evento_id}")) # Volver al Evento
+        markup.add(btn_atras(f"open_event_{cat_data['evento_id']}")) # Volver a Catálogos
         
-        bot.edit_message_text(f"Productos en este Catálogo:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+        bot.edit_message_text(
+            f"📂 Colección: **{cat_data['nombre']}**\nPrendas disponibles:",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
 
-    # --- CREAR PRODUCTO (Simplificado) ---
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("new_prod_ask_"))
-    def ask_prod_name(call):
-        cat_id = call.data.split("_")[3]
-        msg = bot.send_message(call.message.chat.id, "Nombre - Precio (Ej: 'Baby Tee - 25000'):")
-        bot.register_next_step_handler(msg, lambda m: save_product(m, cat_id))
-
-    def save_product(message, cat_id):
-        try:
-            datos = message.text.split('-')
-            nombre = datos[0].strip()
-            precio = float(datos[1].strip())
-            conn = get_connection()
-            with conn.cursor() as cur:
-                cur.execute("INSERT INTO productos (catalogo_id, nombre, precio) VALUES (%s, %s, %s) RETURNING id", (cat_id, nombre, precio))
-                prod_id = cur.fetchone()['id']
-                # Crear talles base en 0
-                for t in ['XS', 'S', 'M', 'L', 'XL', 'XXL']:
-                    cur.execute("INSERT INTO inventario (producto_id, talla, stock) VALUES (%s, %s, 0)", (prod_id, t))
-            conn.commit()
-            conn.close()
-            bot.send_message(message.chat.id, f"✅ Producto **{nombre}** creado.")
-        except:
-            bot.send_message(message.chat.id, "❌ Error formato.")
-
-    # --- VER PRODUCTO Y STOCK ACTUAL ---
+    # --- VISTA DE PRODUCTO ---
     @bot.callback_query_handler(func=lambda call: call.data.startswith("view_prod_"))
-    def view_product(call):
-        prod_id = call.data.split("_")[2]
+    def view_prod(call):
+        pid = call.data.split("_")[2]
         conn = get_connection()
         cur = conn.cursor()
         
-        # Info producto
-        cur.execute("SELECT nombre, catalogo_id FROM productos WHERE id = %s", (prod_id,))
-        p_data = cur.fetchone()
+        cur.execute("SELECT nombre, catalogo_id, precio FROM productos WHERE id = %s", (pid,))
+        p = cur.fetchone()
         
-        # Info Stock
-        cur.execute("SELECT talla, stock FROM inventario WHERE producto_id = %s ORDER BY id", (prod_id,))
-        stock_lines = cur.fetchall()
+        cur.execute("SELECT talla, stock FROM inventario WHERE producto_id = %s ORDER BY id", (pid,))
+        stock = cur.fetchall()
         conn.close()
         
-        txt_stock = "\n".join([f"• **{s['talla']}**: {s['stock']}" for s in stock_lines])
-        
+        txt = ""
+        for s in stock:
+            txt += f"• **{s['talla']}**: {s['stock']}\n"
+            
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📦 CARGAR STOCK (Asistente)", callback_data=f"wizard_stock_{prod_id}"))
-        markup.add(types.InlineKeyboardButton("❌ Borrar Producto", callback_data=f"del_prod_{prod_id}"))
-        markup.add(btn_atras(f"list_prod_{p_data['catalogo_id']}"))
+        markup.add(types.InlineKeyboardButton("📦 CARGAR STOCK (WIZARD)", callback_data=f"wizard_start_{pid}"))
+        markup.add(types.InlineKeyboardButton("🗑 Borrar Producto", callback_data=f"del_prod_{pid}"))
+        markup.add(btn_atras(f"list_prod_{p['catalogo_id']}"))
         
-        bot.edit_message_text(f"👕 **{p_data['nombre']}**\n\nStock Actual:\n{txt_stock}", 
-                              call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+        bot.edit_message_text(
+            f"👕 **{p['nombre']}** (${p['precio']})\n\nStock Actual:\n{txt}",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
 
-    # ==========================================
-    # 🧙‍♂️ ASISTENTE DE CARGA DE STOCK (WIZARD)
-    # ==========================================
+    # --- NUEVO PRODUCTO ---
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("new_prod_ask_"))
+    def ask_prod(call):
+        cat_id = call.data.split("_")[3]
+        msg = bot.send_message(call.message.chat.id, "Escribe: `Nombre - Precio`", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, lambda m: save_prod(m, cat_id))
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("wizard_stock_"))
-    def start_stock_wizard(call):
-        prod_id = call.data.split("_")[2]
+    def save_prod(message, cat_id):
+        try:
+            parts = message.text.split('-')
+            nom = parts[0].strip()
+            pre = float(parts[1].strip())
+            
+            conn = get_connection()
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO productos (catalogo_id, nombre, precio) VALUES (%s, %s, %s) RETURNING id", (cat_id, nom, pre))
+                pid = cur.fetchone()['id']
+                # Talles vacíos
+                for t in ['XS', 'S', 'M', 'L', 'XL', 'XXL']:
+                    cur.execute("INSERT INTO inventario (producto_id, talla, stock) VALUES (%s, %s, 0)", (pid, t))
+            conn.commit()
+            conn.close()
+            
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("🔙 Volver", callback_data=f"list_prod_{cat_id}"))
+            bot.send_message(message.chat.id, f"✅ **{nom}** creado.", reply_markup=markup, parse_mode="Markdown")
+        except:
+            bot.send_message(message.chat.id, "❌ Error formato.")
+
+    # ====================================================
+    # 🧙‍♂️ WIZARD DE STOCK COMPLETO (CON CORRECCIÓN)
+    # ====================================================
+    
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("wizard_start_"))
+    def wizard_start(call):
+        pid = call.data.split("_")[2]
         uid = call.from_user.id
         
-        # Inicializamos el borrador en 0 para todos los talles
-        CURRENT_PROD_EDIT[uid] = prod_id
-        DRAFT_STOCK[uid] = {'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0}
+        # Inicializar sesión
+        CURRENT_PROD[uid] = pid
+        DRAFT_STOCK[uid] = {} # Limpio
         
-        # Empezamos preguntando por el primer talle: XS
-        msg = bot.send_message(call.message.chat.id, "📦 **Carga de Stock**\n\n¿Cuántas **XS** vas a agregar? (Escribe 0 si ninguna)")
-        bot.register_next_step_handler(msg, lambda m: ask_next_size(m, 'XS'))
+        # Empezar por el primer talle
+        ask_size_step(call.message, uid, 'XS')
 
-    def ask_next_size(message, current_size):
-        uid = message.from_user.id
-        
-        # Validar que sea numero
-        try:
-            qty = int(message.text)
-        except:
-            bot.send_message(message.chat.id, "❌ Debe ser un número entero. Intenta de nuevo:")
-            bot.register_next_step_handler(message, lambda m: ask_next_size(m, current_size))
+    def ask_size_step(message, uid, talla):
+        msg = bot.send_message(message.chat.id, f"📦 ¿Cuántas **{talla}** agregamos? (Escribe 0 si ninguna)", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, lambda m: process_size_input(m, uid, talla))
+
+    def process_size_input(message, uid, talla):
+        if not message.text.isdigit():
+            bot.send_message(message.chat.id, "❌ Solo números enteros.")
+            ask_size_step(message, uid, talla)
             return
 
-        # Guardar en borrador
-        DRAFT_STOCK[uid][current_size] = qty
+        qty = int(message.text)
+        DRAFT_STOCK[uid][talla] = qty
         
-        # Definir el orden de talles
-        talles_orden = ['XS', 'S', 'M', 'L', 'XL', 'XXL']
-        idx_actual = talles_orden.index(current_size)
+        # Siguiente talle
+        talles = ['XS', 'S', 'M', 'L', 'XL', 'XXL']
+        idx = talles.index(talla)
         
-        if idx_actual < len(talles_orden) - 1:
-            # Preguntar por el siguiente talle
-            next_size = talles_orden[idx_actual + 1]
-            msg = bot.send_message(message.chat.id, f"¿Cuántas **{next_size}** vas a agregar?")
-            bot.register_next_step_handler(msg, lambda m: ask_next_size(m, next_size))
+        if idx < len(talles) - 1:
+            next_t = talles[idx + 1]
+            ask_size_step(message, uid, next_t)
         else:
-            # Terminamos de preguntar todos, mostramos RESUMEN
+            # Fin del loop -> Mostrar Resumen
             show_confirmation(message.chat.id, uid)
 
     def show_confirmation(chat_id, uid):
         draft = DRAFT_STOCK[uid]
-        # Filtrar solo los que suman algo para el mensaje
-        resumen = "\n".join([f"{t}: +{q}" for t, q in draft.items() if q > 0])
+        # Solo mostrar lo que se va a sumar
+        lines = [f"• {t}: +{q}" for t, q in draft.items() if q > 0]
+        summary = "\n".join(lines) if lines else "Nada (0)"
         
-        if not resumen: resumen = "No se agregará nada."
-        
-        txt = f"📝 **Confirmación de Carga**\n\nVas a sumar al stock:\n{resumen}\n\n¿Es correcto?"
+        txt = f"📝 **Confirmación de Carga**\n\nVas a sumar:\n{summary}\n\n¿Es correcto?"
         
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("✅ SÍ, Guardar", callback_data="confirm_stock_yes"))
-        markup.add(types.InlineKeyboardButton("❌ NO, corregir talle", callback_data="confirm_stock_no"))
+        markup.add(types.InlineKeyboardButton("✅ SÍ, Guardar", callback_data="stock_YES"))
+        markup.add(types.InlineKeyboardButton("❌ NO, Corregir un talle", callback_data="stock_NO"))
         
         bot.send_message(chat_id, txt, reply_markup=markup, parse_mode="Markdown")
 
-    # --- CONFIRMACIÓN: SI ---
-    @bot.callback_query_handler(func=lambda call: call.data == "confirm_stock_yes")
+    # --- CASO SI: GUARDAR ---
+    @bot.callback_query_handler(func=lambda call: call.data == "stock_YES")
     def save_stock_db(call):
         uid = call.from_user.id
-        prod_id = CURRENT_PROD_EDIT.get(uid)
+        pid = CURRENT_PROD.get(uid)
         draft = DRAFT_STOCK.get(uid)
         
-        if not prod_id or not draft:
-            bot.send_message(call.message.chat.id, "❌ Error de sesión. Empieza de nuevo.")
-            return
-
         conn = get_connection()
         with conn.cursor() as cur:
-            for talla, cantidad in draft.items():
-                if cantidad > 0:
-                    # Sumamos al stock existente
-                    cur.execute("""
-                        UPDATE inventario 
-                        SET stock = stock + %s 
-                        WHERE producto_id = %s AND talla = %s
-                    """, (cantidad, prod_id, talla))
+            for t, q in draft.items():
+                if q > 0:
+                    cur.execute("UPDATE inventario SET stock = stock + %s WHERE producto_id = %s AND talla = %s", (q, pid, t))
         conn.commit()
         conn.close()
         
-        bot.edit_message_text("✅ **Stock Actualizado Exitosamente**", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        bot.send_message(call.message.chat.id, "✅ **Stock Actualizado.**", parse_mode="Markdown")
         
-        # Volver a ver el producto
-        # Simulamos un callback para recargar la vista del producto
-        call.data = f"view_prod_{prod_id}"
-        view_product(call)
+        # Volver al producto
+        call.data = f"view_prod_{pid}"
+        view_prod(call)
 
-    # --- CONFIRMACIÓN: NO (CORREGIR) ---
-    @bot.callback_query_handler(func=lambda call: call.data == "confirm_stock_no")
-    def ask_which_fix(call):
+    # --- CASO NO: CORREGIR TALLE ESPECÍFICO ---
+    @bot.callback_query_handler(func=lambda call: call.data == "stock_NO")
+    def ask_fix_which(call):
+        # Mostrar botones con los talles para elegir cuál corregir
         markup = types.InlineKeyboardMarkup(row_width=3)
         talles = ['XS', 'S', 'M', 'L', 'XL', 'XXL']
-        btns = [types.InlineKeyboardButton(t, callback_data=f"fix_size_{t}") for t in talles]
+        btns = [types.InlineKeyboardButton(t, callback_data=f"fix_sz_{t}") for t in talles]
         markup.add(*btns)
         
         bot.edit_message_text("¿Qué talle quieres corregir?", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("fix_size_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("fix_sz_"))
     def fix_specific_size(call):
         talla = call.data.split("_")[2]
-        msg = bot.send_message(call.message.chat.id, f"Entendido. ¿Cuántas **{talla}** deberían ser realmente?")
-        bot.register_next_step_handler(msg, lambda m: update_draft_and_show(m, talla))
+        msg = bot.send_message(call.message.chat.id, f"Ok, ¿cuántas **{talla}** deberían ser realmente?", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, lambda m: update_draft_single(m, talla))
 
-    def update_draft_and_show(message, talla):
+    def update_draft_single(message, talla):
         uid = message.from_user.id
-        try:
-            qty = int(message.text)
-            DRAFT_STOCK[uid][talla] = qty
+        if message.text.isdigit():
+            # Actualizamos SOLO ese talle en el borrador
+            DRAFT_STOCK[uid][talla] = int(message.text)
+            # Volvemos a mostrar la confirmación
             show_confirmation(message.chat.id, uid)
-        except:
-            bot.send_message(message.chat.id, "❌ Número inválido.")
+        else:
+            bot.send_message(message.chat.id, "❌ Error, ingresa número.")
+            fix_specific_size(message) # Reintentar

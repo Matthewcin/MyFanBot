@@ -2,6 +2,11 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+# ⚠️ ¡ATENCIÓN! ESTO BORRA LA DB Y LA CREA DE CERO
+# Úsalo SOLO en el primer deploy para crear la tabla de Eventos.
+# Luego cámbialo a False.
+RESET_DB = True
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_connection():
@@ -17,6 +22,12 @@ def init_db():
     if not conn: return
     
     with conn.cursor() as cur:
+        if RESET_DB:
+            print("⚠️ MODO RESET: Borrando estructura vieja...")
+            tablas = ["inventario", "productos", "catalogos", "eventos", "envios", "usuarios"]
+            for t in tablas:
+                cur.execute(f"DROP TABLE IF EXISTS {t} CASCADE;")
+
         # 1. Usuarios
         cur.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
@@ -28,7 +39,7 @@ def init_db():
             );
         """)
 
-        # 2. EVENTOS (NUEVO NIVEL RAÍZ)
+        # 2. EVENTOS (Jerarquía Nivel 1)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS eventos (
                 id SERIAL PRIMARY KEY,
@@ -37,7 +48,7 @@ def init_db():
             );
         """)
 
-        # 3. Catálogos (Ahora pertenecen a un Evento)
+        # 3. Catálogos (Jerarquía Nivel 2)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS catalogos (
                 id SERIAL PRIMARY KEY,
@@ -47,7 +58,7 @@ def init_db():
             );
         """)
         
-        # 4. Productos
+        # 4. Productos (Jerarquía Nivel 3)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS productos (
                 id SERIAL PRIMARY KEY,
@@ -83,4 +94,4 @@ def init_db():
         
         conn.commit()
     conn.close()
-    print("✅ Base de datos Jerárquica (Evento -> Catálogo) lista.")
+    print("✅ Base de datos (Estructura Eventos) lista.")
