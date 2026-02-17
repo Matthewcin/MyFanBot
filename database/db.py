@@ -2,7 +2,6 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# Render inyecta esto automáticamente
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_connection():
@@ -18,27 +17,37 @@ def init_db():
     if not conn: return
     
     with conn.cursor() as cur:
-        # 1. Usuarios (Todos son ADMIN por defecto)
+        # 1. Usuarios
         cur.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 user_id BIGINT PRIMARY KEY,
                 nombre TEXT,
                 username TEXT,
-                rol TEXT DEFAULT 'admin', -- CAMBIO: Default Admin
+                rol TEXT DEFAULT 'admin',
                 fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
 
-        # 2. Catálogos (Colecciones)
+        # 2. EVENTOS (NUEVO NIVEL RAÍZ)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS catalogos (
+            CREATE TABLE IF NOT EXISTS eventos (
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(100) UNIQUE NOT NULL,
                 activo BOOLEAN DEFAULT TRUE
             );
         """)
+
+        # 3. Catálogos (Ahora pertenecen a un Evento)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS catalogos (
+                id SERIAL PRIMARY KEY,
+                evento_id INTEGER REFERENCES eventos(id) ON DELETE CASCADE,
+                nombre VARCHAR(100) NOT NULL,
+                activo BOOLEAN DEFAULT TRUE
+            );
+        """)
         
-        # 3. Productos
+        # 4. Productos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS productos (
                 id SERIAL PRIMARY KEY,
@@ -49,7 +58,7 @@ def init_db():
             );
         """)
 
-        # 4. Inventario (Tallas y Stock)
+        # 5. Inventario
         cur.execute("""
             CREATE TABLE IF NOT EXISTS inventario (
                 id SERIAL PRIMARY KEY,
@@ -60,7 +69,7 @@ def init_db():
             );
         """)
         
-        # 5. Envíos (Logística interna)
+        # 6. Envíos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS envios (
                 tracking_id VARCHAR(20) PRIMARY KEY,
@@ -74,4 +83,4 @@ def init_db():
         
         conn.commit()
     conn.close()
-    print("✅ Base de datos (Modo Inventario) lista.")
+    print("✅ Base de datos Jerárquica (Evento -> Catálogo) lista.")
