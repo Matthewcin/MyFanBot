@@ -3,7 +3,8 @@ import time
 import telebot
 from utils.keep_alive import start_server
 from database.db import init_db
-from handlers import start, catalogs, products, shipping, statistics
+# Importamos el nuevo módulo 'sales'
+from handlers import start, catalogs, products, shipping, statistics, sales
 
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
@@ -12,22 +13,23 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# Inicia DB (Borra todo si RESET_DB=True)
+# Iniciar DB (RESET_DB=True la primera vez)
 init_db()
 
-# Cargar módulos
+# Registrar Handlers
 start.register(bot)
 catalogs.register(bot)
 products.register(bot)
 shipping.register(bot)
 statistics.register(bot)
+sales.register(bot) # <-- REGISTRAMOS VENTAS
 
 # Servidor Web
 start_server()
 
 # Polling
 def main():
-    print("🤖 BOT INICIADO")
+    print("🤖 MYFANBOX BOT ONLINE")
     while True:
         try:
             bot.infinity_polling(timeout=10, long_polling_timeout=5)
