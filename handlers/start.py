@@ -29,7 +29,7 @@ def register(bot):
         # Mensaje directo de herramienta de trabajo
         bot.send_message(
             message.chat.id, 
-            f"🛠 **Panel de Control - MyFanBox**\n\nHola {nombre}, sistema de inventario listo.\nSelecciona una operación:",
+            f"🛠 **Panel de Control - MyFanBox**\n\nHola Preciosa, Este es tu Nuevo sistema de inventario <3.\nSelecciona una Opción:",
             reply_markup=menu_principal_kb(),
             parse_mode="Markdown"
         )
@@ -37,7 +37,7 @@ def register(bot):
     @bot.callback_query_handler(func=lambda call: call.data == "main_menu")
     def back_main(call):
         bot.edit_message_text(
-            "🛠 **Panel de Control - MyFanBox**\nSelecciona una operación:",
+            "🛠 **Panel de Control - MyFanBox**\nSelecciona una Opción:",
             call.message.chat.id,
             call.message.message_id,
             reply_markup=menu_principal_kb(),
