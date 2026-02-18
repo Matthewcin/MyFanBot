@@ -3,6 +3,7 @@ import io
 import os
 
 # --- RUTAS ---
+# Ajustamos base_dir para que suba un nivel desde 'utils' y encuentre 'assets'
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 FONT_PATH = os.path.join(ASSETS_DIR, 'fonts', 'negrita.ttf') 
@@ -12,39 +13,45 @@ LOGO_PATH = os.path.join(ASSETS_DIR, 'images', 'logo_white.png')
 DPI = 300
 SCALE = 300 / 144
 
-# 1. DIMENSIONES EXACTAS DE LA TARJETA (Lienzo Final)
+# --- DIMENSIONES DEL LIENZO FINAL (SOLO LA TARJETA) ---
 CARD_W = int(566.63 * SCALE)
 CARD_H = int(323.79 * SCALE)
 MARGEN_PX = int(0.3 * 118.11)
 
-# 2. CALCULO DE COORDENADAS RELATIVAS
-# Estas son las posiciones "absolutas" en la hoja A4 que tú definiste
-ABS_T1_X = 42 * SCALE
-ABS_T1_Y = 750 * SCALE
-ABS_T2_Y = 900 * SCALE
-ABS_L_X = 408 * SCALE
-ABS_L_Y = 834 * SCALE
+# --- CÁLCULO DE COORDENADAS RELATIVAS ---
+# Basado en tu código de calibración final.
+# El punto (0,0) de la nueva imagen equivale al inicio de la tarjeta negra en la hoja A4.
 
-# Calculamos dónde empezaba la tarjeta en la hoja A4
-START_X = ABS_T1_X - MARGEN_PX
-START_Y = ABS_T1_Y - MARGEN_PX
+# Un pequeño padding extra que usabas en tu código (5 * SCALE)
+PADDING_EXTRA = int(5 * SCALE)
 
-# 3. TRANSFORMACIÓN: Coordenadas relativas a la tarjeta (0,0)
-# Simplemente restamos el inicio de la tarjeta a las coordenadas absolutas
-REL_T1_X = ABS_T1_X - START_X
-REL_T1_Y = ABS_T1_Y - START_Y
-REL_T2_Y = ABS_T2_Y - START_Y
-REL_L_X = ABS_L_X - START_X
-REL_L_Y = ABS_L_Y - START_Y
+# Posición X inicial para textos (Margen rojo + padding extra)
+FINAL_TXT_X = MARGEN_PX + PADDING_EXTRA
 
-# Medidas del logo según tu código final (163x121 escalado)
-L_W = int(163 * SCALE)
-L_H = int(121 * SCALE)
+# Posición Y inicial para Bloque 1 (Margen rojo + padding extra)
+FINAL_T1_Y = MARGEN_PX + PADDING_EXTRA
+
+# Posición Y inicial para Bloque 2
+# Cálculo: (T2_Y original + padding) - (Inicio tarjeta Y)
+# (900*S + 5*S) - (750*S - MARGEN) = 155*S + MARGEN
+FINAL_T2_Y = int(155 * SCALE) + MARGEN_PX
+
+# Posición del Logo
+# Cálculo X: L_X original - Inicio tarjeta X = 408*S - (42*S - MARGEN) = 366*S + MARGEN
+FINAL_LOGO_X = int(366 * SCALE) + MARGEN_PX
+# Cálculo Y: L_Y original - Inicio tarjeta Y = 834*S - (750*S - MARGEN) = 84*S + MARGEN
+FINAL_LOGO_Y = int(84 * SCALE) + MARGEN_PX
+
+# Dimensiones del logo (tomadas de tu código final: 163x121)
+FINAL_LOGO_W = int(163 * SCALE)
+FINAL_LOGO_H = int(121 * SCALE)
+
 
 def generar_etiqueta_moto(datos, return_object=False):
     """
-    Genera únicamente la tarjeta negra HD (300 DPI)
+    Genera únicamente la tarjeta negra HD (300 DPI).
     """
+    # Crear lienzo negro (Solo el tamaño de la tarjeta)
     img = Image.new('RGB', (CARD_W, CARD_H), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
     
@@ -56,7 +63,7 @@ def generar_etiqueta_moto(datos, return_object=False):
     line_spacing = int(26 * SCALE)
 
     # ==========================================
-    # BLOQUE 1: REMITENTE (YANETH PLAZAS)
+    # BLOQUE 1: REMITENTE (YANETH PLAZAS - FIJO)
     # ==========================================
     sender_lines = [
         "DESDE:",
@@ -66,8 +73,8 @@ def generar_etiqueta_moto(datos, return_object=False):
         "YELLOWER.CO@GMAIL.COM"
     ]
 
-    curr_x = REL_T1_X
-    curr_y = REL_T1_Y
+    curr_x = FINAL_TXT_X
+    curr_y = FINAL_T1_Y
 
     for line in sender_lines:
         draw.text((curr_x, curr_y), line, font=font, fill="white")
@@ -76,7 +83,6 @@ def generar_etiqueta_moto(datos, return_object=False):
     # ==========================================
     # BLOQUE 2: DESTINATARIO (DINÁMICO)
     # ==========================================
-    # Extraer datos con valores por defecto por seguridad
     nombre = datos.get('nombre', '').upper()
     destino = datos.get('destino', '').upper()
     cc = datos.get('cc', '').upper()
@@ -92,7 +98,7 @@ def generar_etiqueta_moto(datos, return_object=False):
         f"BRR: {barrio}"
     ]
 
-    curr_y = REL_T2_Y
+    curr_y = FINAL_T2_Y
     for line in recipient_lines:
         draw.text((curr_x, curr_y), line, font=font, fill="white")
         curr_y += line_spacing
@@ -102,8 +108,8 @@ def generar_etiqueta_moto(datos, return_object=False):
     # ==========================================
     try:
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo = logo.resize((L_W, L_H), Image.Resampling.LANCZOS)
-        img.paste(logo, (int(REL_L_X), int(REL_L_Y)), logo)
+        logo = logo.resize((FINAL_LOGO_W, FINAL_LOGO_H), Image.Resampling.LANCZOS)
+        img.paste(logo, (FINAL_LOGO_X, FINAL_LOGO_Y), logo)
     except Exception as e:
         print(f"Error cargando logo: {e}")
         pass
@@ -113,13 +119,13 @@ def generar_etiqueta_moto(datos, return_object=False):
         return img
 
     bio = io.BytesIO()
+    # Guardar con 300 DPI en metadatos
     img.save(bio, format='PNG', dpi=(300, 300))
     bio.seek(0)
     return bio
 
 # --- PARCHE DE COMPATIBILIDAD ---
-# Evita que shipping.py se rompa por no encontrar esta función.
-# Redirige la llamada para generar una sola etiqueta.
+# Mantenemos esto para que shipping.py no falle al importar.
 def generar_hoja_a4(lista_pedidos):
     if not lista_pedidos:
         return None
