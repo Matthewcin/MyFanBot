@@ -2,7 +2,7 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# En Render, DATABASE_URL se inyecta automáticamente
+# Render inyecta esto automáticamente
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_connection():
@@ -70,24 +70,29 @@ def init_db():
             );
         """)
         
-        # 6. VENTAS (NUEVA TABLA)
+        # 6. VENTAS
         cur.execute("""
             CREATE TABLE IF NOT EXISTS ventas (
                 id SERIAL PRIMARY KEY,
                 producto_id INTEGER REFERENCES productos(id),
+                nombre_producto VARCHAR(150),
                 talla VARCHAR(10),
-                cantidad INTEGER,
+                precio_venta DECIMAL(10,2),
                 fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 usuario_id BIGINT
             );
         """)
         
-        # 7. Envíos
+        # 7. ENVÍOS (¡ACTUALIZADA CON TODOS LOS CAMPOS!)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS envios (
                 tracking_id VARCHAR(20) PRIMARY KEY,
                 venta_id INTEGER REFERENCES ventas(id),
                 cliente_nombre VARCHAR(100),
+                cc VARCHAR(50),           -- NUEVO
+                telefono VARCHAR(50),     -- NUEVO
+                ciudad VARCHAR(100),      -- NUEVO
+                depto VARCHAR(100),       -- NUEVO
                 direccion TEXT,
                 producto_info TEXT,
                 estado VARCHAR(50) DEFAULT 'Pendiente',
@@ -97,4 +102,4 @@ def init_db():
         
         conn.commit()
     conn.close()
-    print("✅ Base de datos verificada y tablas creadas.")
+    print("✅ Base de datos verificada (Estructura Completa V3).")

@@ -5,63 +5,50 @@ import os
 # --- CONFIGURACIÓN DE RUTAS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
-# Asegúrate de tener la fuente negrita.ttf en utils/assets/fonts/
 FONT_PATH = os.path.join(ASSETS_DIR, 'fonts', 'negrita.ttf') 
-# Asegúrate de tener el logo_white.png en utils/assets/images/
 LOGO_PATH = os.path.join(ASSETS_DIR, 'images', 'logo_white.png')
 
-def generar_etiqueta_moto(datos):
+# --- CONFIGURACIÓN DE TAMAÑOS (300 DPI) ---
+CARD_W, CARD_H = 1181, 673  # 10cm x 5.7cm
+A4_W, A4_H = 2480, 3508     # A4 Vertical
+
+def generar_etiqueta_moto(datos, return_object=False):
     """
-    Genera la etiqueta negra con medidas exactas: 10cm x 5.7cm (a 300 DPI).
-    Resolución resultante: 1181 x 673 px (Máxima Calidad).
+    Genera la etiqueta individual.
+    Si return_object=True, devuelve la imagen PIL (para pegar en A4).
+    Si return_object=False, devuelve bytes (para enviar por Telegram).
     """
-    # 1. Dimensiones Exactas (300 DPI)
-    W, H = 1181, 673
-    img = Image.new('RGB', (W, H), color=(0, 0, 0))
+    img = Image.new('RGB', (CARD_W, CARD_H), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # 2. Configuración de Fuente
     WHITE = (255, 255, 255)
-    # Tamaño de fuente exacto solicitado por el usuario
-    FONT_SIZE = 10.1 
-    # Reducimos el interlineado proporcionalmente al nuevo tamaño de fuente
-    LINE_HEIGHT = int(FONT_SIZE * 1.5) 
+    
+    # Ajuste visual para que coincida con tu referencia
+    FONT_SIZE = 36 
+    LINE_HEIGHT = 50
 
     try:
-        # Pillow acepta float para el tamaño desde versiones recientes
         font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
-    except OSError:
-        print("⚠️ Error cargando fuente, usando default.")
-        font = ImageFont.load_default()
-    except Exception as e:
-        print(f"⚠️ Error inesperado con la fuente: {e}, usando default.")
+    except:
         font = ImageFont.load_default()
 
-
-    # 3. Cargar y Ajustar Logo (Se mantiene grande a la derecha)
+    # --- LOGO ---
     try:
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        # El logo ocupará el 65% de la altura de la tarjeta
-        target_h = int(H * 0.65) 
+        target_h = int(CARD_H * 0.65) 
         aspect_ratio = logo.width / logo.height
         target_w = int(target_h * aspect_ratio)
-        
-        # Usamos LANCZOS para el redimensionado de mayor calidad
         logo = logo.resize((target_w, target_h), Image.Resampling.LANCZOS)
-        
-        # Posición: Centrado verticalmente, pegado a la derecha con margen
-        logo_x = W - target_w - 50 
-        logo_y = (H - target_h) // 2
-        
+        logo_x = CARD_W - target_w - 50 
+        logo_y = (CARD_H - target_h) // 2
         img.paste(logo, (logo_x, logo_y), logo)
-    except Exception as e:
-         print(f"⚠️ No se pudo cargar el logo: {e}")
+    except:
+        pass
 
-    # 4. Dibujar Texto
+    # --- TEXTO ---
     MARGIN_LEFT = 50
-    CURRENT_Y = 50    # Margen superior inicial
+    CURRENT_Y = 50
 
-    # --- SECCIÓN REMITENTE (Datos Fijos) ---
     sender_lines = [
         "DESDE:",
         "BOGOTÁ – YANETH PLAZAS",
@@ -74,11 +61,9 @@ def generar_etiqueta_moto(datos):
         draw.text((MARGIN_LEFT, CURRENT_Y), line, font=font, fill=WHITE)
         CURRENT_Y += LINE_HEIGHT
 
-    # --- ESPACIO DIVISOR ---
-    # Ajustamos el espacio proporcionalmente
-    CURRENT_Y += LINE_HEIGHT * 2
+    CURRENT_Y += LINE_HEIGHT * 0.8 
 
-    # --- SECCIÓN DESTINATARIO (Datos Dinámicos) ---
+    # Datos dinámicos
     ciudad = datos.get('ciudad', '').upper()
     depto = datos.get('depto', '').upper()
     nombre = datos.get('nombre', '').upper()
@@ -97,8 +82,53 @@ def generar_etiqueta_moto(datos):
         draw.text((MARGIN_LEFT, CURRENT_Y), line, font=font, fill=WHITE)
         CURRENT_Y += LINE_HEIGHT
 
-    # 5. Exportar en PNG (Formato sin pérdida de máxima calidad)
+    if return_object:
+        return img
+
     bio = io.BytesIO()
     img.save(bio, format='PNG')
+    bio.seek(0)
+    return bio
+
+def generar_hoja_a4(lista_pedidos):
+    """
+    Recibe una lista de diccionarios (máx 8).
+    Genera una hoja A4 lista para imprimir.
+    """
+    # Hoja blanca
+    hoja = Image.new('RGB', (A4_W, A4_H), color=(255, 255, 255))
+    
+    # Márgenes calculados para centrar 2 columnas
+    # Ancho contenido: 1181 * 2 = 2362. A4 Ancho: 2480. Sobra: 118. Margen X = 59.
+    MARGIN_X = 59
+    MARGIN_Y = 150 
+    GAP_X = 0      # Pegadas de lado
+    GAP_Y = 10     # Separación vertical pequeña para corte
+    
+    cols = 2
+    
+    for i, datos in enumerate(lista_pedidos):
+        if i >= 8: break 
+        
+        # Generar imagen individual (objeto PIL)
+        tarjeta_img = generar_etiqueta_moto(datos, return_object=True)
+        
+        # Calcular posición
+        col = i % cols
+        row = i // cols
+        
+        x = MARGIN_X + (col * (CARD_W + GAP_X))
+        y = MARGIN_Y + (row * (CARD_H + GAP_Y))
+        
+        # Pegar
+        hoja.paste(tarjeta_img, (x, y))
+        
+        # Guía de corte gris muy suave
+        draw = ImageDraw.Draw(hoja)
+        draw.rectangle([x, y, x+CARD_W, y+CARD_H], outline=(200, 200, 200), width=2)
+
+    # Exportar
+    bio = io.BytesIO()
+    hoja.save(bio, format='PNG')
     bio.seek(0)
     return bio
