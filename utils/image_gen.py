@@ -1,52 +1,67 @@
-# utils/image_gen.py
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
 
 # --- CONFIGURACIÓN DE RUTAS ---
-# Esto busca las carpetas automáticamente dentro de 'utils/assets/'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
-FONT_PATH = os.path.join(ASSETS_DIR, 'fonts', 'Poppins-Regular.ttf')
-LOGO_PATH = os.path.join(ASSETS_DIR, 'images', 'logo_white.webp')
+# Asegúrate de tener la fuente negrita.ttf en utils/assets/fonts/
+FONT_PATH = os.path.join(ASSETS_DIR, 'fonts', 'negrita.ttf') 
+# Asegúrate de tener el logo_white.png en utils/assets/images/
+LOGO_PATH = os.path.join(ASSETS_DIR, 'images', 'logo_white.png')
 
 def generar_etiqueta_moto(datos):
     """
-    Genera la etiqueta negra estilo "motomandado".
-    Recibe un diccionario 'datos' con: ciudad, depto, nombre, cc, telefono, direccion.
+    Genera la etiqueta negra con medidas exactas: 10cm x 5.7cm (a 300 DPI).
+    Resolución resultante: 1181 x 673 px (Máxima Calidad).
     """
-    # 1. Crear lienzo negro (Ancho 800 x Alto 450 aprox)
-    W, H = 800, 450
+    # 1. Dimensiones Exactas (300 DPI)
+    W, H = 1181, 673
     img = Image.new('RGB', (W, H), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # 2. Cargar Fuente y Logo
+    # 2. Configuración de Fuente
     WHITE = (255, 255, 255)
+    # Tamaño de fuente exacto solicitado por el usuario
+    FONT_SIZE = 10.1 
+    # Reducimos el interlineado proporcionalmente al nuevo tamaño de fuente
+    LINE_HEIGHT = int(FONT_SIZE * 1.5) 
+
     try:
-        # Tamaño 24 se asemeja a la muestra
-        font = ImageFont.truetype(FONT_PATH, 24)
+        # Pillow acepta float para el tamaño desde versiones recientes
+        font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
     except OSError:
-        print("⚠️ ERROR: No se encontró el archivo .ttf en utils/assets/fonts/")
-        # Fallback a fuente fea por defecto si falla
+        print("⚠️ Error cargando fuente, usando default.")
+        font = ImageFont.load_default()
+    except Exception as e:
+        print(f"⚠️ Error inesperado con la fuente: {e}, usando default.")
         font = ImageFont.load_default()
 
+
+    # 3. Cargar y Ajustar Logo (Se mantiene grande a la derecha)
     try:
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        # Redimensionar logo proporcionalmente (ej: ancho 220px)
-        aspect_ratio = logo.height / logo.width
-        new_width = 220
-        new_height = int(new_width * aspect_ratio)
-        logo = logo.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    except FileNotFoundError:
-         print("⚠️ ERROR: No se encontró logo_white.png en utils/assets/images/")
-         logo = None
+        # El logo ocupará el 65% de la altura de la tarjeta
+        target_h = int(H * 0.65) 
+        aspect_ratio = logo.width / logo.height
+        target_w = int(target_h * aspect_ratio)
+        
+        # Usamos LANCZOS para el redimensionado de mayor calidad
+        logo = logo.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        
+        # Posición: Centrado verticalmente, pegado a la derecha con margen
+        logo_x = W - target_w - 50 
+        logo_y = (H - target_h) // 2
+        
+        img.paste(logo, (logo_x, logo_y), logo)
+    except Exception as e:
+         print(f"⚠️ No se pudo cargar el logo: {e}")
 
-    # 3. Definir Márgenes y Espaciado
-    MARGIN_LEFT = 40
-    CURRENT_Y = 40    # Posición vertical inicial
-    LINE_HEIGHT = 38  # Espacio entre renglones
+    # 4. Dibujar Texto
+    MARGIN_LEFT = 50
+    CURRENT_Y = 50    # Margen superior inicial
 
-    # --- SECCIÓN 1: REMITENTE (Estático) ---
+    # --- SECCIÓN REMITENTE (Datos Fijos) ---
     sender_lines = [
         "DESDE:",
         "BOGOTÁ – YANETH PLAZAS",
@@ -59,19 +74,11 @@ def generar_etiqueta_moto(datos):
         draw.text((MARGIN_LEFT, CURRENT_Y), line, font=font, fill=WHITE)
         CURRENT_Y += LINE_HEIGHT
 
-    # --- SECCIÓN 2: PEGAR LOGO ---
-    if logo:
-        # Posición: Derecha, centrado verticalmente
-        logo_x = W - logo.width - 50
-        logo_y = (H - logo.height) // 2
-        # Usar el mismo logo como máscara para transparencia
-        img.paste(logo, (logo_x, logo_y), logo)
+    # --- ESPACIO DIVISOR ---
+    # Ajustamos el espacio proporcionalmente
+    CURRENT_Y += LINE_HEIGHT * 2
 
-    # --- SECCIÓN 3: DESTINATARIO (Dinámico) ---
-    # Añadir un doble espacio antes de esta sección
-    CURRENT_Y += LINE_HEIGHT * 1.5
-
-    # Formatear datos (Mayúsculas para que coincida)
+    # --- SECCIÓN DESTINATARIO (Datos Dinámicos) ---
     ciudad = datos.get('ciudad', '').upper()
     depto = datos.get('depto', '').upper()
     nombre = datos.get('nombre', '').upper()
@@ -80,10 +87,9 @@ def generar_etiqueta_moto(datos):
     dir_envio = datos.get('direccion', '').upper()
 
     recipient_lines = [
-        f"ENVIAR A: {ciudad}.{depto}",
+        f"ENVIAR A: {ciudad}. {depto}",
         f"{nombre}",
-        # Usamos f-string padding (<20) para simular el espacio tabulado entre CC y CEL
-        f"CC.{cc:<20} CEL: {tel}",
+        f"CC.{cc}   CEL: {tel}",
         f"{dir_envio}"
     ]
 
@@ -91,7 +97,7 @@ def generar_etiqueta_moto(datos):
         draw.text((MARGIN_LEFT, CURRENT_Y), line, font=font, fill=WHITE)
         CURRENT_Y += LINE_HEIGHT
 
-    # 4. Guardar imagen en memoria (buffer RAM)
+    # 5. Exportar en PNG (Formato sin pérdida de máxima calidad)
     bio = io.BytesIO()
     img.save(bio, format='PNG')
     bio.seek(0)
