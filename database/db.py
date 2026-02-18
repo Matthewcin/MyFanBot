@@ -2,11 +2,7 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# ⚠️ ¡ATENCIÓN! ESTO BORRA LA DB Y LA CREA DE CERO
-# Úsalo SOLO en el primer deploy para crear la tabla de Eventos.
-# Luego cámbialo a False.
-RESET_DB = True
-
+# En Render, DATABASE_URL se inyecta automáticamente
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_connection():
@@ -22,12 +18,6 @@ def init_db():
     if not conn: return
     
     with conn.cursor() as cur:
-        if RESET_DB:
-            print("⚠️ MODO RESET: Borrando estructura vieja...")
-            tablas = ["inventario", "productos", "catalogos", "eventos", "envios", "usuarios"]
-            for t in tablas:
-                cur.execute(f"DROP TABLE IF EXISTS {t} CASCADE;")
-
         # 1. Usuarios
         cur.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
@@ -39,7 +29,7 @@ def init_db():
             );
         """)
 
-        # 2. EVENTOS (Jerarquía Nivel 1)
+        # 2. Eventos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS eventos (
                 id SERIAL PRIMARY KEY,
@@ -48,7 +38,7 @@ def init_db():
             );
         """)
 
-        # 3. Catálogos (Jerarquía Nivel 2)
+        # 3. Catálogos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS catalogos (
                 id SERIAL PRIMARY KEY,
@@ -58,7 +48,7 @@ def init_db():
             );
         """)
         
-        # 4. Productos (Jerarquía Nivel 3)
+        # 4. Productos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS productos (
                 id SERIAL PRIMARY KEY,
@@ -80,10 +70,23 @@ def init_db():
             );
         """)
         
-        # 6. Envíos
+        # 6. VENTAS (NUEVA TABLA)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ventas (
+                id SERIAL PRIMARY KEY,
+                producto_id INTEGER REFERENCES productos(id),
+                talla VARCHAR(10),
+                cantidad INTEGER,
+                fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                usuario_id BIGINT
+            );
+        """)
+        
+        # 7. Envíos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS envios (
                 tracking_id VARCHAR(20) PRIMARY KEY,
+                venta_id INTEGER REFERENCES ventas(id),
                 cliente_nombre VARCHAR(100),
                 direccion TEXT,
                 producto_info TEXT,
@@ -94,4 +97,4 @@ def init_db():
         
         conn.commit()
     conn.close()
-    print("✅ Base de datos (Estructura Eventos) lista.")
+    print("✅ Base de datos verificada y tablas creadas.")

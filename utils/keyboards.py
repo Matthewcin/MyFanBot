@@ -1,9 +1,11 @@
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 def btn_atras(callback_data):
+    """Genera un botón estándar de volver."""
     return InlineKeyboardButton("🔙 Volver", callback_data=callback_data)
 
 def menu_principal_kb():
+    """Genera el teclado del Dashboard Principal."""
     markup = InlineKeyboardMarkup(row_width=1)
     
     # ACCIÓN PRINCIPAL: VENDER
@@ -11,7 +13,7 @@ def menu_principal_kb():
     
     # Gestión
     markup.row(
-        InlineKeyboardButton("🎫 Eventos/Stock", callback_data="admin_events"),
+        InlineKeyboardButton("🎫 Eventos/Stock", callback_data="admin_cats"),
         InlineKeyboardButton("📜 Historial Ventas", callback_data="ver_historial")
     )
     

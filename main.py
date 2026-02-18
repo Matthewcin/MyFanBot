@@ -1,41 +1,53 @@
 import os
 import time
 import telebot
-from utils.keep_alive import start_server
 from database.db import init_db
-# Importamos el nuevo módulo 'sales'
-from handlers import start, catalogs, products, shipping, statistics, sales
+
+# Imports handlers
+from utils.keep_alive import start_server
+from handlers import start, catalogs, products, shipping, statistics, sales 
+
+# Carga variables (en Render no es necesario dotenv, pero por compatibilidad local se deja try)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 TOKEN = os.getenv("BOT_TOKEN")
+
 if not TOKEN:
-    print("❌ ERROR: FALTA BOT_TOKEN")
+    print("❌ ERROR FATAL: No se encontró BOT_TOKEN")
     exit(1)
 
 bot = telebot.TeleBot(TOKEN)
 
-# Iniciar DB (RESET_DB=True la primera vez)
+# 1. Inicializar DB
+print("🛠 Inicializando base de datos...")
 init_db()
 
-# Registrar Handlers
+# 2. Registrar Handlers
+print("🔗 Conectando módulos...")
 start.register(bot)
 catalogs.register(bot)
 products.register(bot)
 shipping.register(bot)
 statistics.register(bot)
-sales.register(bot) # <-- REGISTRAMOS VENTAS
+sales.register(bot) # <-- REGISTRAR VENTAS
 
-# Servidor Web
+# 3. Servidor Web (Keep Alive)
+print("🌍 Iniciando servidor web...")
 start_server()
 
-# Polling
-def main():
-    print("🤖 MYFANBOX BOT ONLINE")
+# 4. Loop
+def main_loop():
+    print("🤖 MyFanBox Bot Iniciado...")
     while True:
         try:
             bot.infinity_polling(timeout=10, long_polling_timeout=5)
         except Exception as e:
-            print(e)
+            print(f"⚠️ Error en polling: {e}")
             time.sleep(5)
 
 if __name__ == "__main__":
-    main()
+    main_loop()
