@@ -3,7 +3,10 @@ import string
 from telebot import types
 from database.db import get_connection
 from utils.keyboards import btn_atras, menu_principal_kb
-from utils.image_gen import generar_etiqueta_moto, generar_hoja_a4
+
+# --- CAMBIO IMPORTANTE AQUÍ ---
+# Importamos la nueva función 'generar_etiqueta_unica' para tarjetas individuales
+from utils.image_gen import generar_etiqueta_unica, generar_hoja_a4
 
 # --- MEMORIAS TEMPORALES ---
 SHIPPING_SESSION = {}  # Para el paso a paso de crear envío
@@ -99,8 +102,8 @@ def register(bot):
             conn.commit()
             conn.close()
             
-            # 3. GENERAR IMAGEN INDIVIDUAL
-            img_bio = generar_etiqueta_moto(datos)
+            # 3. GENERAR IMAGEN INDIVIDUAL (Solo la tarjeta negra)
+            img_bio = generar_etiqueta_unica(datos)
             
             # 4. Enviar resultado
             bot.send_photo(
@@ -173,8 +176,8 @@ def register(bot):
                 'direccion': e['direccion']
             }
             
-            # Generar imagen individual
-            img_bio = generar_etiqueta_moto(datos)
+            # Generar imagen individual (Solo la tarjeta negra)
+            img_bio = generar_etiqueta_unica(datos)
             
             bot.send_photo(
                 message.chat.id, 
@@ -226,6 +229,7 @@ def register(bot):
                     'direccion': e['direccion']
                 })
 
+            # Generar HOJA A4 (Blanca con grilla)
             img_a4 = generar_hoja_a4(lista_datos)
             
             bot.delete_message(call.message.chat.id, msg_wait.message_id)
@@ -310,8 +314,9 @@ def register(bot):
         conn = get_connection()
         try:
             with conn.cursor() as cur:
-                fmt = ','.join(['%s']*len(ids))
-                query = f"SELECT cliente_nombre, ciudad, depto, cc, telefono, direccion FROM envios WHERE tracking_id IN ({fmt})"
+                # Formatear IDs de manera segura para la query
+                placeholders = ', '.join(['%s'] * len(ids))
+                query = f"SELECT cliente_nombre, ciudad, depto, cc, telefono, direccion FROM envios WHERE tracking_id IN ({placeholders})"
                 cur.execute(query, tuple(ids))
                 data_db = cur.fetchall()
             
@@ -326,7 +331,9 @@ def register(bot):
                     'direccion': e['direccion']
                 })
                 
+            # Generar HOJA A4 PERSONALIZADA
             img_a4 = generar_hoja_a4(lista)
+            
             bot.delete_message(call.message.chat.id, msg.message_id)
             bot.send_document(call.message.chat.id, img_a4, visible_file_name="seleccion_A4.png", caption="✅ **Hoja Personalizada Lista**")
             

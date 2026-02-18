@@ -6,7 +6,7 @@ import os
 # 1. CONFIGURACIÓN Y CONSTANTES
 # ==========================================
 
-# Rutas de archivos
+# Rutas (Ajustadas para subir un nivel desde 'utils' a 'assets')
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 FONT_PATH = os.path.join(ASSETS_DIR, 'fonts', 'negrita.ttf') 
@@ -14,64 +14,62 @@ LOGO_PATH = os.path.join(ASSETS_DIR, 'images', 'logo_white.png')
 
 # Configuración HD (300 DPI)
 DPI = 300
-SCALE = 300 / 144  # 2.0833...
+SCALE = 300 / 144  # aprox 2.0833
 
-# --- MEDIDAS DE LA TARJETA (Negra) ---
-CARD_W = int(566.63 * SCALE)  # ~1180 px
-CARD_H = int(323.79 * SCALE)  # ~674 px
+# --- MEDIDAS DE LA TARJETA NEGRA ---
+# (Calculadas con tus fórmulas originales)
+CARD_W = int(566.63 * SCALE)
+CARD_H = int(323.79 * SCALE)
 
-# --- MEDIDAS DE LA HOJA A4 (Blanca) ---
+# --- MEDIDAS DE LA HOJA A4 BLANCA ---
 A4_W = 2480
 A4_H = 3508
 
-# --- CÁLCULO DE COORDENADAS INTERNAS (RELATIVAS A LA TARJETA) ---
-# Extraídas matemáticamente de tu código "resultado final" para que quede IGUAL.
+# --- MATEMÁTICAS DE COORDENADAS (RELATIVAS A LA TARJETA) ---
+# Traducimos las coordenadas "absolutas de la hoja de prueba" a 
+# coordenadas "relativas (0,0)" dentro de la tarjeta negra.
 
-# Margen rojo que usabas de referencia
+# Tu margen base
 MARGEN_PX = int(0.3 * 118.11)
-# Padding extra que usabas en el draw.text
-PADDING = int(5 * SCALE)
-# Espaciado entre líneas de texto
+# El padding interno que usabas en el draw.text
+PADDING_TXT = int(5 * SCALE)
+# Espaciado entre líneas
 LINE_SPACING = int(26 * SCALE)
 
 # Posición X del Texto (Izquierda)
-POS_TXT_X = MARGEN_PX + PADDING
+REL_X_TXT = MARGEN_PX + PADDING_TXT
 
-# Posición Y del Texto 1 (Remitente) - Arriba
-POS_TXT1_Y = MARGEN_PX + PADDING
+# Posición Y del Texto 1 (Remitente)
+REL_Y_T1 = MARGEN_PX + PADDING_TXT
 
 # Posición Y del Texto 2 (Destinatario)
-# En tu código global: T2_Y (900*S) - Card_Y (750*S - M) + Padding
-# Diferencia base: 150 * SCALE
-POS_TXT2_Y = int(150 * SCALE) + MARGEN_PX + PADDING
+# Diferencia entre T2 (900) y T1 (750) = 150 * SCALE
+REL_Y_T2 = int(150 * SCALE) + MARGEN_PX + PADDING_TXT
 
 # Posición del Logo
-# En tu código global: Logo_X (408*S) - Card_X (42*S - M)
-# Diferencia base X: 366 * SCALE
-POS_LOGO_X = int(366 * SCALE) + MARGEN_PX
+# X: Diferencia entre Logo (408) y Inicio Tarjeta (42) = 366 * SCALE
+REL_X_LOGO = int(366 * SCALE) + MARGEN_PX
+# Y: Diferencia entre Logo (834) y Inicio Tarjeta (750) = 84 * SCALE
+REL_Y_LOGO = int(84 * SCALE) + MARGEN_PX
 
-# En tu código global: Logo_Y (834*S) - Card_Y (750*S - M)
-# Diferencia base Y: 84 * SCALE
-POS_LOGO_Y = int(84 * SCALE) + MARGEN_PX
-
-# Tamaño del Logo (163x121 escalado)
+# Tamaño Logo (163x121 escalado)
 LOGO_W = int(163 * SCALE)
 LOGO_H = int(121 * SCALE)
 
 
 # ==========================================
-# 2. FUNCIÓN BASE: CREAR TARJETA INDIVIDUAL
+# 2. MOTOR GRÁFICO (PRIVADO)
 # ==========================================
-def crear_imagen_tarjeta(datos):
+
+def _crear_tarjeta_individual(datos):
     """
-    Crea y devuelve un objeto Image (PIL) con la tarjeta negra perfecta.
-    No guarda en disco, solo memoria.
+    Genera un objeto Image (PIL) de la tarjeta negra con los datos inyectados.
     """
-    # 1. Lienzo Negro
+    # 1. Crear lienzo negro del tamaño exacto de la tarjeta
     img = Image.new('RGB', (CARD_W, CARD_H), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # 2. Fuente
+    # 2. Cargar Fuente
     try:
         font = ImageFont.truetype(FONT_PATH, int(20 * SCALE))
     except:
@@ -86,14 +84,15 @@ def crear_imagen_tarjeta(datos):
         "YELLOWER.CO@GMAIL.COM"
     ]
     
-    curr_y = POS_TXT1_Y
+    curr_y = REL_Y_T1
     for line in sender_lines:
-        draw.text((POS_TXT_X, curr_y), line, font=font, fill="white")
+        draw.text((REL_X_TXT, curr_y), line, font=font, fill="white")
         curr_y += LINE_SPACING
 
-    # 4. Datos Destinatario (Dinámicos del Bot)
+    # 4. Datos Destinatario (Dinámicos desde la BD)
+    # Usamos .get() con valores vacíos por seguridad
     nombre = datos.get('nombre', '').upper()
-    destino = datos.get('destino', '').upper()
+    destino = datos.get('destino', '').upper() # Ciudad - Depto
     cc = datos.get('cc', '').upper()
     tel = datos.get('telefono', '').upper()
     direccion = datos.get('direccion', '').upper()
@@ -107,83 +106,89 @@ def crear_imagen_tarjeta(datos):
         f"BRR: {barrio}"
     ]
 
-    curr_y = POS_TXT2_Y
+    curr_y = REL_Y_T2
     for line in recipient_lines:
-        draw.text((POS_TXT_X, curr_y), line, font=font, fill="white")
+        draw.text((REL_X_TXT, curr_y), line, font=font, fill="white")
         curr_y += LINE_SPACING
 
-    # 5. Logo
+    # 5. Pegar Logo
     try:
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo = logo.resize((LOGO_W, LOGO_H), Image.Resampling.LANCZOS)
-        img.paste(logo, (POS_LOGO_X, POS_LOGO_Y), logo)
-    except:
+        img.paste(logo, (REL_X_LOGO, REL_Y_LOGO), logo)
+    except Exception as e:
+        print(f"Warning: No se pudo cargar el logo: {e}")
         pass
 
     return img
 
 
 # ==========================================
-# 3. FUNCIONES PÚBLICAS (API)
+# 3. FUNCIONES PÚBLICAS (API DEL BOT)
 # ==========================================
 
-def generar_etiqueta_moto(datos, return_object=False):
+def generar_etiqueta_unica(datos):
     """
-    Devuelve bytes de UNA sola tarjeta negra (sin hoja blanca).
-    Ideal para ver en el celular o enviar por WhatsApp.
+    Caso 1: El usuario pide solo UNA etiqueta.
+    Retorna: Bytes de la tarjeta negra (sin hoja A4).
     """
-    img = crear_imagen_tarjeta(datos)
+    img = _crear_tarjeta_individual(datos)
     
-    if return_object:
-        return img
-
     bio = io.BytesIO()
     img.save(bio, format='PNG', dpi=(300, 300))
     bio.seek(0)
     return bio
 
 
-def generar_hoja_a4(lista_pedidos):
+def generar_hoja_a4(lista_datos):
     """
-    Devuelve bytes de una HOJA A4 BLANCA con las tarjetas pegadas.
-    Ideal para imprimir.
+    Caso 2: El usuario pide varias etiquetas (o una lista).
+    Retorna: Bytes de la hoja A4 BLANCA con las tarjetas organizadas.
+    Capacidad: Hasta 8 tarjetas por hoja.
     """
-    if not lista_pedidos:
+    # Si la lista está vacía, retornar nada
+    if not lista_datos:
         return None
-
-    # 1. Crear Lienzo A4 BLANCO GIGANTE
+    
+    # --- LÓGICA DE GRILLA A4 ---
+    # Crear hoja blanca
     hoja = Image.new('RGB', (A4_W, A4_H), color=(255, 255, 255))
     draw = ImageDraw.Draw(hoja)
-
-    # 2. Configuración de márgenes de impresión (Arriba a la Izquierda)
-    # 50px es un margen seguro para impresoras caseras.
+    
+    # Márgenes de impresión (Arriba a la Izquierda)
     START_X = 50
     START_Y = 50
-    GAP = 20  # Espacio entre tarjetas
-    COLS = 2  # Columnas por hoja
-
-    # 3. Pegar tarjetas
-    for i, datos in enumerate(lista_pedidos):
-        if i >= 8: break # Máximo 8 por hoja
+    GAP = 20   # Espacio entre tarjetas
+    COLS = 2   # 2 Columnas
+    
+    # Iterar sobre los datos (Máximo 8)
+    for i, datos in enumerate(lista_datos):
+        if i >= 8: break 
         
-        # Generar tarjeta individual
-        tarjeta = crear_imagen_tarjeta(datos)
+        # 1. Generar la tarjeta negra individual
+        tarjeta = _crear_tarjeta_individual(datos)
         
-        # Calcular posición en la grilla
+        # 2. Calcular posición (Fila y Columna)
         col = i % COLS
         row = i // COLS
         
         x = START_X + (col * (CARD_W + GAP))
         y = START_Y + (row * (CARD_H + GAP))
         
-        # Pegar en la hoja blanca
+        # 3. Pegar en la hoja
         hoja.paste(tarjeta, (x, y))
         
-        # Línea de corte (Gris clarito)
+        # 4. Dibujar línea de corte gris (opcional, ayuda al cortar)
         draw.rectangle([x, y, x + CARD_W, y + CARD_H], outline=(200, 200, 200), width=1)
 
-    # 4. Retornar hoja completa
     bio = io.BytesIO()
     hoja.save(bio, format='PNG', dpi=(300, 300))
     bio.seek(0)
     return bio
+
+# --- PARCHE DE COMPATIBILIDAD ---
+# Si tu código antiguo llamaba a 'generar_etiqueta_moto', lo redirigimos a la única.
+def generar_etiqueta_moto(datos, return_object=False):
+    if return_object:
+        return _crear_tarjeta_individual(datos)
+    return generar_etiqueta_unica(datos)
