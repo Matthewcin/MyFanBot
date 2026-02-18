@@ -3,7 +3,6 @@ import io
 import os
 
 # --- RUTAS ---
-# Ajuste para que encuentre la carpeta assets subiendo un nivel desde utils
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 FONT_PATH = os.path.join(ASSETS_DIR, 'fonts', 'negrita.ttf') 
@@ -13,25 +12,42 @@ LOGO_PATH = os.path.join(ASSETS_DIR, 'images', 'logo_white.png')
 DPI = 300
 SCALE = 300 / 144
 
-# DIMENSIONES EXACTAS DE LA TARJETA (Solo la tarjeta negra)
+# 1. DIMENSIONES EXACTAS DE LA TARJETA (Lienzo Final)
 CARD_W = int(566.63 * SCALE)
 CARD_H = int(323.79 * SCALE)
 MARGEN_PX = int(0.3 * 118.11)
 
-# OFFSET PARA COORDENADAS RELATIVAS
-# Esto ajusta las coordenadas originales de la hoja grande para que encajen en la tarjeta pequeña
-OFFSET_Y = 750 * SCALE - MARGEN_PX
-OFFSET_X = 42 * SCALE - MARGEN_PX
+# 2. CALCULO DE COORDENADAS RELATIVAS
+# Estas son las posiciones "absolutas" en la hoja A4 que tú definiste
+ABS_T1_X = 42 * SCALE
+ABS_T1_Y = 750 * SCALE
+ABS_T2_Y = 900 * SCALE
+ABS_L_X = 408 * SCALE
+ABS_L_Y = 834 * SCALE
+
+# Calculamos dónde empezaba la tarjeta en la hoja A4
+START_X = ABS_T1_X - MARGEN_PX
+START_Y = ABS_T1_Y - MARGEN_PX
+
+# 3. TRANSFORMACIÓN: Coordenadas relativas a la tarjeta (0,0)
+# Simplemente restamos el inicio de la tarjeta a las coordenadas absolutas
+REL_T1_X = ABS_T1_X - START_X
+REL_T1_Y = ABS_T1_Y - START_Y
+REL_T2_Y = ABS_T2_Y - START_Y
+REL_L_X = ABS_L_X - START_X
+REL_L_Y = ABS_L_Y - START_Y
+
+# Medidas del logo según tu código final (163x121 escalado)
+L_W = int(163 * SCALE)
+L_H = int(121 * SCALE)
 
 def generar_etiqueta_moto(datos, return_object=False):
     """
-    Genera la tarjeta negra HD con los datos de envío.
+    Genera únicamente la tarjeta negra HD (300 DPI)
     """
-    # Crear lienzo negro (Solo la tarjeta)
     img = Image.new('RGB', (CARD_W, CARD_H), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # --- CONFIGURACIÓN DE FUENTE ---
     try:
         font = ImageFont.truetype(FONT_PATH, int(20 * SCALE))
     except:
@@ -40,7 +56,7 @@ def generar_etiqueta_moto(datos, return_object=False):
     line_spacing = int(26 * SCALE)
 
     # ==========================================
-    # 1. BLOQUE REMITENTE (YANETH PLAZAS - FIJO)
+    # BLOQUE 1: REMITENTE (YANETH PLAZAS)
     # ==========================================
     sender_lines = [
         "DESDE:",
@@ -50,20 +66,19 @@ def generar_etiqueta_moto(datos, return_object=False):
         "YELLOWER.CO@GMAIL.COM"
     ]
 
-    # Coordenadas ajustadas al nuevo lienzo
-    curr_x = (42 * SCALE) - OFFSET_X
-    curr_y = (750 * SCALE) - OFFSET_Y
+    curr_x = REL_T1_X
+    curr_y = REL_T1_Y
 
     for line in sender_lines:
         draw.text((curr_x, curr_y), line, font=font, fill="white")
         curr_y += line_spacing
 
     # ==========================================
-    # 2. BLOQUE DESTINATARIO (DINÁMICO)
+    # BLOQUE 2: DESTINATARIO (DINÁMICO)
     # ==========================================
-    # Datos dinámicos que llegan del bot
+    # Extraer datos con valores por defecto por seguridad
     nombre = datos.get('nombre', '').upper()
-    destino = datos.get('destino', '').upper() # Debe incluir Ciudad y Depto
+    destino = datos.get('destino', '').upper()
     cc = datos.get('cc', '').upper()
     tel = datos.get('telefono', '').upper()
     direccion = datos.get('direccion', '').upper()
@@ -77,29 +92,18 @@ def generar_etiqueta_moto(datos, return_object=False):
         f"BRR: {barrio}"
     ]
 
-    # Coordenada Y bajada a 900 según calibración
-    t2_y_calibrado = (900 * SCALE) - OFFSET_Y
-    curr_y = t2_y_calibrado
-    
+    curr_y = REL_T2_Y
     for line in recipient_lines:
         draw.text((curr_x, curr_y), line, font=font, fill="white")
         curr_y += line_spacing
 
     # ==========================================
-    # 3. LOGO (PNG HD)
+    # LOGO (PNG HD)
     # ==========================================
     try:
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        
-        # Medida calibrada: 86x64 escalada a HD
-        l_w, l_h = int(86 * SCALE), int(64 * SCALE)
-        logo = logo.resize((l_w, l_h), Image.Resampling.LANCZOS)
-        
-        # Posición ajustada
-        lx = (408 * SCALE) - OFFSET_X
-        ly = (834 * SCALE) - OFFSET_Y
-        
-        img.paste(logo, (int(lx), int(ly)), logo)
+        logo = logo.resize((L_W, L_H), Image.Resampling.LANCZOS)
+        img.paste(logo, (int(REL_L_X), int(REL_L_Y)), logo)
     except Exception as e:
         print(f"Error cargando logo: {e}")
         pass
@@ -109,16 +113,14 @@ def generar_etiqueta_moto(datos, return_object=False):
         return img
 
     bio = io.BytesIO()
-    # Guardamos con 300 DPI en los metadatos
     img.save(bio, format='PNG', dpi=(300, 300))
     bio.seek(0)
     return bio
 
 # --- PARCHE DE COMPATIBILIDAD ---
-# Esta función existe solo para que no falle la importación en shipping.py
-# Si la llaman, devolverá una sola etiqueta en lugar de una hoja A4.
+# Evita que shipping.py se rompa por no encontrar esta función.
+# Redirige la llamada para generar una sola etiqueta.
 def generar_hoja_a4(lista_pedidos):
     if not lista_pedidos:
         return None
-    # Devuelve solo la primera etiqueta de la lista
     return generar_etiqueta_moto(lista_pedidos[0])
