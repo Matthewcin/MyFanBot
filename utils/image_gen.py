@@ -3,79 +3,69 @@ import io
 import os
 
 # ==========================================
-# 1. CONFIGURACIÓN Y RUTAS (CON DEBUG)
+# 1. CONSTANTES EXACTAS (TU CALIBRACIÓN)
 # ==========================================
 
-# Construcción de rutas absolutas
+# Ajustamos la ruta base para que funcione dentro de la carpeta 'utils'
+# Sube un nivel para encontrar la carpeta 'assets'
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 FONT_PATH = os.path.join(ASSETS_DIR, 'fonts', 'negrita.ttf') 
 LOGO_PATH = os.path.join(ASSETS_DIR, 'images', 'logo_white.png')
 
-# --- DEBUG: IMPRIMIR RUTAS EN CONSOLA ---
-print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
-print(f"[DEBUG] FONT_PATH: {FONT_PATH} - Existe: {os.path.exists(FONT_PATH)}")
-print(f"[DEBUG] LOGO_PATH: {LOGO_PATH} - Existe: {os.path.exists(LOGO_PATH)}")
-# ----------------------------------------
-
-# Configuración HD (300 DPI)
 DPI = 300
-SCALE = 300 / 144  # aprox 2.0833
+SCALE = 300 / 144
 
-# --- MEDIDAS DE LA TARJETA NEGRA (Calculadas) ---
-CARD_W = int(566.63 * SCALE) # ~1180 px
-CARD_H = int(323.79 * SCALE) # ~674 px
+# Dimensiones del Lienzo de trabajo (Tu hoja gris)
+HOJA_W = int(1191 * SCALE)
+HOJA_H = int(1684.5 * SCALE)
 
-# --- MEDIDAS HOJA A4 ---
-A4_W = 2480
-A4_H = 3508
+# Dimensiones de la Tarjeta
+CARD_W = 566.63 * SCALE
+CARD_H = 323.79 * SCALE
 
-# --- COORDENADAS RELATIVAS FINALES (DENTRO DE LA TARJETA) ---
-# Estos valores son el resultado exacto de la matemática de tu script de referencia.
-# Colocan los elementos en la misma posición visual.
+MARGEN_PX = int(0.3 * 118.11)
 
-# Margen izquierdo para todo el texto
-POS_X_TEXTO = int(45 * SCALE)
+# Coordenadas exactas de tu código
+T1_X, T1_Y = 42 * SCALE, 750 * SCALE
+T1_W, T1_H = 326 * SCALE, 128 * SCALE
 
-# Altura Texto 1 (Remitente)
-POS_Y_T1 = int(45 * SCALE)
+# Ajuste confirmado: 900
+T2_X, T2_Y = 42 * SCALE, 900 * SCALE 
+T2_W = CARD_W - (2 * MARGEN_PX)
+T2_H = 126 * SCALE
 
-# Altura Texto 2 (Destinatario) - Basado en tu ajuste de 900
-POS_Y_T2 = int(358 * SCALE)
+L_X, L_Y = 408 * SCALE, 834 * SCALE
+L_W, L_H = 163 * SCALE, 121 * SCALE
 
-# Posición Logo
-POS_X_LOGO = int(850 * SCALE) # Ajustado a la derecha
-POS_Y_LOGO = int(45 * SCALE)  # Alineado arriba
-
-# Tamaño Logo (163x121 escalado)
-LOGO_W = int(163 * SCALE)
-LOGO_H = int(121 * SCALE)
-
-# Espaciado y Fuente
-LINE_SPACING = int(26 * SCALE)
-FONT_SIZE = int(20 * SCALE)
+CARD_X = T1_X - MARGEN_PX
+CARD_Y = T1_Y - MARGEN_PX
 
 
 # ==========================================
-# 2. MOTOR GRÁFICO
+# 2. MOTOR DE GENERACIÓN (NÚCLEO)
 # ==========================================
 
-def _crear_tarjeta_base(datos):
+def _crear_tarjeta_recortada(datos):
     """
-    Genera la imagen de la tarjeta negra.
+    Dibuja la hoja completa usando TU código exacto, 
+    pero al final recorta y devuelve solo la tarjeta negra.
     """
-    img = Image.new('RGB', (CARD_W, CARD_H), color=(0, 0, 0))
+    # 1. Crear el lienzo grande (igual que tu script)
+    img = Image.new('RGB', (HOJA_W, HOJA_H), color=(240, 240, 240))
     draw = ImageDraw.Draw(img)
-    
-    # 1. CARGAR FUENTE (CON DEBUG)
+
+    # 2. Dibujar rectángulo negro (igual que tu script)
+    draw.rectangle([CARD_X, CARD_Y, CARD_X + CARD_W, CARD_Y + CARD_H], fill=(0, 0, 0))
+
+    # 3. Cargar Fuente
     try:
-        font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
-    except Exception as e:
-        print(f"[ERROR] No se pudo cargar la fuente 'negrita.ttf'. Usando default. Error: {e}")
+        font = ImageFont.truetype(FONT_PATH, int(20 * SCALE))
+    except:
         font = ImageFont.load_default()
 
-    # 2. DATOS REMITENTE (Fijos)
-    sender_lines = [
+    # 4. Texto Remitente (Fijo)
+    remitente = [
         "DESDE:",
         "BOGOTÁ - YANETH PLAZAS",
         "CC.1026600344 CEL: 3134553455",
@@ -83,12 +73,12 @@ def _crear_tarjeta_base(datos):
         "YELLOWER.CO@GMAIL.COM"
     ]
     
-    curr_y = POS_Y_T1
-    for line in sender_lines:
-        draw.text((POS_X_TEXTO, curr_y), line, font=font, fill="white")
-        curr_y += LINE_SPACING
+    cy = T1_Y + (5 * SCALE)
+    for line in remitente:
+        draw.text((T1_X + (5 * SCALE), cy), line, font=font, fill="white")
+        cy += int(26 * SCALE)
 
-    # 3. DATOS DESTINATARIO (Dinámicos)
+    # 5. Texto Destinatario (Dinámico desde el Bot)
     nombre = datos.get('nombre', '').upper()
     destino = datos.get('destino', '').upper()
     cc = datos.get('cc', '').upper()
@@ -96,73 +86,104 @@ def _crear_tarjeta_base(datos):
     direccion = datos.get('direccion', '').upper()
     barrio = datos.get('barrio', '').upper()
 
-    recipient_lines = [
+    destinatario = [
         f"ENVIAR A: {destino}",
         f"{nombre}",
         f"CC.{cc}  CEL: {tel}",
         f"{direccion}",
         f"BRR: {barrio}"
     ]
+    
+    cy = T2_Y + (5 * SCALE)
+    for line in destinatario:
+        draw.text((T2_X + (5 * SCALE), cy), line, font=font, fill="white")
+        cy += int(26 * SCALE)
 
-    curr_y = POS_Y_T2
-    for line in recipient_lines:
-        draw.text((POS_X_TEXTO, curr_y), line, font=font, fill="white")
-        curr_y += LINE_SPACING
-
-    # 4. PEGAR LOGO (CON DEBUG)
+    # 6. Logo
     try:
-        if os.path.exists(LOGO_PATH):
-            logo = Image.open(LOGO_PATH).convert("RGBA")
-            logo = logo.resize((LOGO_W, LOGO_H), Image.Resampling.LANCZOS)
-            # Pegar en la esquina superior derecha
-            target_x = CARD_W - LOGO_W - int(50 * SCALE)
-            target_y = POS_Y_T1
-            img.paste(logo, (target_x, target_y), logo)
-            print("[DEBUG] Logo pegado correctamente.")
-        else:
-            print(f"[ERROR] El archivo de logo NO EXISTE en: {LOGO_PATH}")
+        logo = Image.open(LOGO_PATH).convert("RGBA")
+        logo = logo.resize((int(L_W), int(L_H)), Image.Resampling.LANCZOS)
+        img.paste(logo, (int(L_X), int(L_Y)), logo)
     except Exception as e:
-        print(f"[ERROR] Falló al procesar/pegar el logo: {e}")
+        print(f"Error logo: {e}")
+        pass
 
-    return img
+    # 7. EL TRUCO: Recortamos solo la parte negra
+    # Usamos las coordenadas exactas donde dibujaste el rectángulo negro
+    box = (int(CARD_X), int(CARD_Y), int(CARD_X + CARD_W), int(CARD_Y + CARD_H))
+    tarjeta_final = img.crop(box)
+    
+    return tarjeta_final
 
 
 # ==========================================
-# 3. FUNCIONES PÚBLICAS
+# 3. FUNCIONES PARA EL BOT
 # ==========================================
 
 def generar_etiqueta_unica(datos):
-    img = _crear_tarjeta_base(datos)
+    """
+    Retorna solo la tarjeta negra (sin hoja).
+    """
+    img = _crear_tarjeta_recortada(datos)
+    
     bio = io.BytesIO()
-    img.save(bio, format='PNG', dpi=(300, 300))
+    img.save(bio, format='PNG', dpi=(DPI, DPI))
     bio.seek(0)
     return bio
 
+
 def generar_hoja_a4(lista_datos):
-    if not lista_datos: return None
+    """
+    Crea una hoja blanca A4 y pega las tarjetas negras en orden (hasta 8).
+    """
+    if not lista_datos:
+        return None
+
+    # Dimensiones A4 a 300 DPI
+    A4_WIDTH = 2480
+    A4_HEIGHT = 3508
     
-    hoja = Image.new('RGB', (A4_W, A4_H), color=(255, 255, 255))
+    # Crear hoja blanca limpia
+    hoja = Image.new('RGB', (A4_WIDTH, A4_HEIGHT), color=(255, 255, 255))
     draw = ImageDraw.Draw(hoja)
-    
-    MARGIN_X, MARGIN_Y = 50, 50
+
+    # Configuración de grilla para pegar las tarjetas
+    MARGIN_X = 50
+    MARGIN_Y = 50
     GAP = 20
     COLS = 2
 
+    # Medidas reales de la tarjeta recortada
+    w_card = int(CARD_W)
+    h_card = int(CARD_H)
+
     for i, datos in enumerate(lista_datos):
         if i >= 8: break
-        tarjeta = _crear_tarjeta_base(datos)
-        col, row = i % COLS, i // COLS
-        x = MARGIN_X + (col * (CARD_W + GAP))
-        y = MARGIN_Y + (row * (CARD_H + GAP))
-        hoja.paste(tarjeta, (int(x), int(y)))
-        draw.rectangle([x, y, x + CARD_W, y + CARD_H], outline=(200, 200, 200), width=1)
+        
+        # Generamos la tarjeta negra perfecta usando tu código base
+        tarjeta = _crear_tarjeta_recortada(datos)
+        
+        # Calcular posición
+        col = i % COLS
+        row = i // COLS
+        
+        x = MARGIN_X + (col * (w_card + GAP))
+        y = MARGIN_Y + (row * (h_card + GAP))
+        
+        # Pegar
+        hoja.paste(tarjeta, (x, y))
+        
+        # Línea de corte gris
+        draw.rectangle([x, y, x + w_card, y + h_card], outline=(200, 200, 200), width=1)
 
     bio = io.BytesIO()
-    hoja.save(bio, format='PNG', dpi=(300, 300))
+    hoja.save(bio, format='PNG', dpi=(DPI, DPI))
     bio.seek(0)
     return bio
 
-# Parche de compatibilidad
+
+# Compatibilidad para que shipping.py no falle
 def generar_etiqueta_moto(datos, return_object=False):
-    if return_object: return _crear_tarjeta_base(datos)
+    if return_object:
+        return _crear_tarjeta_recortada(datos)
     return generar_etiqueta_unica(datos)
