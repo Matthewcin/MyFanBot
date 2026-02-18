@@ -24,7 +24,7 @@ CARD_H = 323.79 * SCALE
 
 MARGEN_PX = int(0.3 * 118.11)
 
-# --- NUEVAS COORDENADAS (arriba a la izquierda) ---
+# NUEVAS COORDENADAS (arriba a la izquierda)
 OFFSET_Y = 30 * SCALE                     # Posición superior de la tarjeta
 
 # Posiciones horizontales (margen izquierdo)
@@ -66,7 +66,11 @@ def _crear_tarjeta_recortada(datos):
     try:
         font = ImageFont.truetype(FONT_PATH, int(20 * SCALE))
     except:
-        font = ImageFont.load_default()
+        try:
+            # Fallback a Arial en Windows
+            font = ImageFont.truetype("C:\\Windows\\Fonts\\arial.ttf", int(20 * SCALE))
+        except:
+            font = ImageFont.load_default()
 
     # 3. Texto Remitente (fijo)
     remitente = [
@@ -87,15 +91,13 @@ def _crear_tarjeta_recortada(datos):
     if ciudad and depto:
         destino = f"{ciudad}-{depto}"
     else:
-        destino = ciudad or depto or ""
+        destino = ciudad or depto or "DESTINO NO ESPECIFICADO"
 
-    nombre    = datos.get('nombre', '').upper()
-    cc        = datos.get('cc', '').upper()
-    telefono  = datos.get('telefono', '').upper()
-    direccion = datos.get('direccion', '').upper()
-    barrio    = datos.get('barrio', '').upper()
-    if not barrio:
-        barrio = "-"   # Valor por defecto para mantener 5 líneas
+    nombre    = datos.get('nombre', '').upper() or "NOMBRE NO ESPECIFICADO"
+    cc        = datos.get('cc', '').upper() or "0000000000"
+    telefono  = datos.get('telefono', '').upper() or "0000000000"
+    direccion = datos.get('direccion', '').upper() or "DIRECCION NO ESPECIFICADA"
+    barrio    = datos.get('barrio', '').upper() or "-"
 
     destinatario = [
         f"ENVIAR A: {destino}",
@@ -112,11 +114,19 @@ def _crear_tarjeta_recortada(datos):
 
     # 5. Logo
     try:
-        logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo = logo.resize((int(L_W), int(L_H)), Image.Resampling.LANCZOS)
-        img.paste(logo, (int(L_X), int(L_Y)), logo)
+        if os.path.exists(LOGO_PATH):
+            logo = Image.open(LOGO_PATH).convert("RGBA")
+            logo = logo.resize((int(L_W), int(L_H)), Image.Resampling.LANCZOS)
+            img.paste(logo, (int(L_X), int(L_Y)), logo)
+        else:
+            # Dibujar placeholder si no hay logo
+            draw.rectangle([L_X, L_Y, L_X + L_W, L_Y + L_H], fill=(100, 100, 100), outline=(255, 255, 255))
+            draw.text((L_X + 20, L_Y + 40), "LOGO", font=font, fill="white")
     except Exception as e:
-        print(f"Error logo: {e}")
+        print(f"Error con logo: {e}")
+        # Dibujar placeholder
+        draw.rectangle([L_X, L_Y, L_X + L_W, L_Y + L_H], fill=(100, 100, 100), outline=(255, 255, 255))
+        draw.text((L_X + 20, L_Y + 40), "LOGO", font=font, fill="white")
 
     # 6. Recortar solo la tarjeta
     box = (int(CARD_X), int(CARD_Y), int(CARD_X + CARD_W), int(CARD_Y + CARD_H))
@@ -124,7 +134,7 @@ def _crear_tarjeta_recortada(datos):
     return tarjeta_final
 
 # ==========================================
-# 2. FUNCIONES PÚBLICAS (sin cambios)
+# 2. FUNCIONES PÚBLICAS
 # ==========================================
 
 def generar_etiqueta_unica(datos):
@@ -140,11 +150,14 @@ def generar_hoja_a4(lista_datos):
     if not lista_datos:
         return None
 
+    # Dimensiones A4 estándar a 300 DPI
     A4_WIDTH = 2480
     A4_HEIGHT = 3508
+    
     hoja = Image.new('RGB', (A4_WIDTH, A4_HEIGHT), color=(255, 255, 255))
     draw = ImageDraw.Draw(hoja)
 
+    # Configuración de grilla
     MARGIN_X = 50
     MARGIN_Y = 50
     GAP = 20
@@ -154,15 +167,21 @@ def generar_hoja_a4(lista_datos):
     h_card = int(CARD_H)
 
     for i, datos in enumerate(lista_datos):
-        if i >= 8:
+        if i >= 8:  # Máximo 8 tarjetas por hoja A4
             break
+            
         tarjeta = _crear_tarjeta_recortada(datos)
+        
         col = i % COLS
         row = i // COLS
+        
         x = MARGIN_X + (col * (w_card + GAP))
         y = MARGIN_Y + (row * (h_card + GAP))
+        
         hoja.paste(tarjeta, (x, y))
-        draw.rectangle([x, y, x + w_card, y + h_card], outline=(200, 200, 200), width=1)
+        
+        # Línea de corte gris
+        draw.rectangle([x, y, x + w_card, y + h_card], outline=(200, 200, 200), width=2)
 
     bio = io.BytesIO()
     hoja.save(bio, format='PNG', dpi=(DPI, DPI))
@@ -174,3 +193,34 @@ def generar_etiqueta_moto(datos, return_object=False):
     if return_object:
         return _crear_tarjeta_recortada(datos)
     return generar_etiqueta_unica(datos)
+
+# ==========================================
+# 3. FUNCIÓN DE PRUEBA (opcional)
+# ==========================================
+
+if __name__ == "__main__":
+    print("🧪 Probando generador de imágenes...")
+    
+    # Datos de prueba
+    datos_prueba = {
+        'nombre': 'JUAN PÉREZ GÓMEZ',
+        'ciudad': 'MEDELLÍN',
+        'depto': 'ANTIOQUIA',
+        'cc': '1234567890',
+        'telefono': '3001234567',
+        'direccion': 'CALLE 50 # 65-20 APTO 301',
+        'barrio': 'LAURELES'
+    }
+    
+    # Generar tarjeta individual
+    img_bio = generar_etiqueta_unica(datos_prueba)
+    with open("test_tarjeta.png", "wb") as f:
+        f.write(img_bio.getvalue())
+    print("✅ Tarjeta individual guardada como test_tarjeta.png")
+    
+    # Generar hoja A4 con 4 tarjetas
+    lista = [datos_prueba] * 4
+    hoja_bio = generar_hoja_a4(lista)
+    with open("test_hoja.png", "wb") as f:
+        f.write(hoja_bio.getvalue())
+    print("✅ Hoja A4 guardada como test_hoja.png")
